@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Radio, RefreshCw, Cpu, Layers } from 'lucide-react';
 import type { Stream, CreateStreamPayload } from './types/stream';
 import { fetchStreams, createStream, deleteStream } from './services/api';
+import { getSavedCameras, saveCameraToStorage, removeCameraFromStorage } from './services/storage';
 import { AddStreamForm } from './components/AddStreamForm';
 import { StreamGrid } from './components/StreamGrid';
 import type { GridLayout } from './components/StreamGrid';
@@ -16,8 +17,31 @@ export const App: React.FC = () => {
   const loadStreams = useCallback(async () => {
     try {
       setFetchError(null);
-      const data = await fetchStreams();
-      setStreams(data);
+      let backendStreams = await fetchStreams();
+
+      // Auto-rehydrate from localStorage if backend was restarted or empty
+      const savedCameras = getSavedCameras();
+      if (savedCameras.length > 0) {
+        const existingUrls = new Set(backendStreams.map((s) => s.rtsp_url));
+        const missingFromBackend = savedCameras.filter((c) => !existingUrls.has(c.rtsp_url));
+
+        if (missingFromBackend.length > 0) {
+          // Re-register saved cameras in backend so FFmpeg can stream them
+          for (const cam of missingFromBackend) {
+            try {
+              const registered = await createStream({
+                name: cam.name,
+                rtsp_url: cam.rtsp_url,
+              });
+              backendStreams.push(registered);
+            } catch {
+              // Ignore conflicts if already being registered
+            }
+          }
+        }
+      }
+
+      setStreams(backendStreams);
     } catch (err: unknown) {
       setFetchError(err instanceof Error ? err.message : 'Failed to connect to backend server');
     } finally {
@@ -28,7 +52,14 @@ export const App: React.FC = () => {
   useEffect(() => {
     loadStreams();
     // Poll backend every 5 seconds to update viewer counts and stream status
-    const interval = setInterval(loadStreams, 5000);
+    const interval = setInterval(async () => {
+      try {
+        const data = await fetchStreams();
+        setStreams(data);
+      } catch {
+        // Silent polling error handling
+      }
+    }, 5000);
     return () => clearInterval(interval);
   }, [loadStreams]);
 
@@ -36,6 +67,8 @@ export const App: React.FC = () => {
     setIsSubmitting(true);
     try {
       const newStream = await createStream(payload);
+      // Persist in browser localStorage
+      saveCameraToStorage(payload);
       setStreams((prev) => [...prev, newStream]);
     } finally {
       setIsSubmitting(false);
@@ -44,7 +77,12 @@ export const App: React.FC = () => {
 
   const handleDeleteStream = async (id: string) => {
     try {
+      const target = streams.find((s) => s.id === id);
       await deleteStream(id);
+      if (target) {
+        // Remove from browser localStorage
+        removeCameraFromStorage(target.rtsp_url);
+      }
       setStreams((prev) => prev.filter((s) => s.id !== id));
     } catch (err) {
       console.error('Delete stream error:', err);
