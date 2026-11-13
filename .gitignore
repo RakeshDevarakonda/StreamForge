@@ -1,0 +1,55 @@
+# Binaries and executables
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bin/
+dist/
+build/
+
+# Go specific
+backend/server
+backend/server.exe
+*.test
+*.out
+vendor/
+
+# Node / Frontend specific
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.vite/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# IDE & Editor specific
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/launch.json
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Media & Temporary files
+*.ts
+*.mp4
+*.mkv
+*.flv
+recordings/
+temp/
+logs/
+*.log
+
+# Assignment PDF & documents
+*.pdf
+
