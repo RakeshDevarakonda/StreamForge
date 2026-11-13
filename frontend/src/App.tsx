@@ -174,7 +174,7 @@ export const App: React.FC = () => {
 
       {/* Footer */}
       <footer className="border-t border-slate-900 py-6 px-4 text-center text-xs text-slate-500">
-        <p>Built for Skylark Labs Full Stack Engineer Assessment • React, TypeScript, Go & FFmpeg</p>
+        <p>StreamForge • Ultra Low-Latency Multi-Camera RTSP Live Streaming Platform</p>
       </footer>
     </div>
   );
