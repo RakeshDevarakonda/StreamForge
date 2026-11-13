@@ -65,21 +65,25 @@ func (p *FFmpegProcess) Start(ctx context.Context) (io.ReadCloser, error) {
 	cmdCtx, cancel := context.WithCancel(ctx)
 	p.cancelFunc = cancel
 
-	// Low-latency FFmpeg parameters for RTSP over TCP -> MPEG1 video stream over MPEG-TS
-	// Note: Removed -preset and -tune which are specific to libx264/libx265 and invalid for mpeg1video
+	// Ultra low-latency FFmpeg parameters for RTSP over TCP -> MPEG1 video stream over MPEG-TS
 	args := []string{
+		"-fflags", "nobuffer",            // Disables input buffer to eliminate lag
+		"-flags", "low_delay",            // Low delay flag
 		"-rtsp_transport", "tcp",         // Force TCP for reliable packet delivery
-		"-timeout", "5000000",              // 5 seconds network timeout
-		"-i", p.rtspURL,                    // Input RTSP stream URL
-		"-f", "mpegts",                     // Container format: MPEG-TS
-		"-codec:v", "mpeg1video",           // Video codec: MPEG1 (supported natively by JSMpeg in canvas)
-		"-s", "960x540",                    // Scale resolution for smooth multi-grid rendering
-		"-b:v", "1000k",                    // Video bitrate: 1000 kbps
-		"-bf", "0",                         // No B-frames to minimize latency
-		"-r", "25",                         // Frame rate: 25 fps
-		"-an",                              // Disable audio
-		"-muxdelay", "0.001",               // Minimum mux delay
-		"pipe:1",                           // Output directly to stdout
+		"-timeout", "5000000",            // 5 seconds network timeout
+		"-i", p.rtspURL,                  // Input RTSP stream URL
+		"-f", "mpegts",                   // Container format: MPEG-TS
+		"-codec:v", "mpeg1video",         // Video codec: MPEG1 (supported natively by JSMpeg in canvas)
+		"-s", "854x480",                  // 480p resolution for high framerate and low CPU overhead
+		"-b:v", "800k",                   // Optimized video bitrate
+		"-maxrate", "1000k",              // Cap max bitrate
+		"-bufsize", "500k",               // Small buffer size to prevent queuing delay
+		"-bf", "0",                       // No B-frames to eliminate decoding latency
+		"-g", "25",                       // Keyframe interval: 1 keyframe per second
+		"-r", "25",                       // Frame rate: 25 fps
+		"-an",                            // Disable audio
+		"-muxdelay", "0.001",             // Flush packets immediately
+		"pipe:1",                         // Output directly to stdout
 	}
 
 	p.cmd = exec.CommandContext(cmdCtx, p.ffmpegPath, args...)

@@ -228,8 +228,8 @@ func (w *StreamWorker) Run() {
 			continue
 		}
 
-		// Pipe loop: read binary packets and fan-out to subscribers
-		buf := make([]byte, 8192)
+		// Pipe loop: read binary packets and fan-out to subscribers with responsive chunk size
+		buf := make([]byte, 4096)
 		firstPacketReceived := false
 
 		for {
