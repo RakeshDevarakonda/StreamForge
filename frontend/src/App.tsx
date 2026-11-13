@@ -52,17 +52,6 @@ export const App: React.FC = () => {
 
   useEffect(() => {
     loadStreams();
-    // Poll backend every 5 seconds to update viewer counts and stream status
-    const interval = setInterval(async () => {
-      try {
-        const data = await fetchStreams();
-        setStreams(data);
-        setFetchError(null);
-      } catch (err) {
-        setFetchError(err instanceof Error ? err.message : 'Backend connection lost');
-      }
-    }, 5000);
-    return () => clearInterval(interval);
   }, [loadStreams]);
 
   const handleAddStream = async (payload: CreateStreamPayload) => {

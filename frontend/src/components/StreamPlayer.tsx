@@ -62,7 +62,7 @@ export const StreamPlayer: React.FC<StreamPlayerProps> = ({ stream, onDelete }) 
           setIsConnecting(false);
           setIsLive(false);
           setIsPlaying(false);
-          setPlayerError('Stream closed by server');
+          setPlayerError('Stream closed or not found on server');
         },
         onStalled: () => {
           setIsConnecting(true);
