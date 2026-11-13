@@ -90,15 +90,15 @@ export const StreamPlayer: React.FC<StreamPlayerProps> = ({ stream, onDelete }) 
       className="flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-lg"
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-3.5 py-2.5 bg-slate-900/90 border-b border-slate-800">
-        <div className="flex items-center space-x-2 truncate">
-          <span className={`h-2.5 w-2.5 rounded-full ${isLive ? 'bg-emerald-500 animate-pulse' : 'bg-slate-600'}`} />
+      <div className="flex items-center justify-between px-3 py-2 bg-slate-900/90 border-b border-slate-800">
+        <div className="flex items-center space-x-2 truncate min-w-0 mr-2">
+          <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${isLive ? 'bg-emerald-500 animate-pulse' : 'bg-slate-600'}`} />
           <span className="font-medium text-xs text-slate-200 truncate">{stream.name}</span>
         </div>
         <button
           onClick={() => onDelete(stream.id)}
           title="Delete stream"
-          className="text-slate-400 hover:text-rose-400 p-1 rounded transition-colors cursor-pointer"
+          className="text-slate-400 hover:text-rose-400 p-1 rounded transition-colors cursor-pointer shrink-0"
         >
           <Trash2 className="w-3.5 h-3.5" />
         </button>
