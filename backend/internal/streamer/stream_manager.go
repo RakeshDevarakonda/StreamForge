@@ -2,6 +2,8 @@ package streamer
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"io"
 	"log"
 	"sync"
@@ -9,7 +11,6 @@ import (
 
 	"streamforge-backend/internal/config"
 	"streamforge-backend/internal/models"
-	"streamforge-backend/internal/service"
 	"streamforge-backend/internal/websocket"
 )
 
@@ -19,70 +20,60 @@ const (
 
 // StreamWorker manages a single RTSP stream's FFmpeg process and fans out chunks to subscribers
 type StreamWorker struct {
-	streamID    string
+	streamKey   string
 	rtspURL     string
 	ffmpegPath  string
 	process     *FFmpegProcess
 	procMu      sync.RWMutex
 	subscribers map[*websocket.Client]bool
 	subMu       sync.RWMutex
-	store       *service.StreamStore
 	stopChan    chan struct{}
 	lastActive  time.Time
 	activeMu    sync.RWMutex
 	stopOnce    sync.Once
 	isStopped   bool
-	onStopped   func(streamID string, w *StreamWorker)
+	onStopped   func(streamKey string, w *StreamWorker)
 }
 
-// StreamManager coordinates all active StreamWorkers
+// StreamManager coordinates on-demand StreamWorkers
 type StreamManager struct {
 	cfg     *config.Config
-	store   *service.StreamStore
 	workers map[string]*StreamWorker
 	mu      sync.RWMutex
 }
 
 // NewStreamManager creates a stream manager instance
-func NewStreamManager(cfg *config.Config, store *service.StreamStore) *StreamManager {
+func NewStreamManager(cfg *config.Config) *StreamManager {
 	return &StreamManager{
 		cfg:     cfg,
-		store:   store,
 		workers: make(map[string]*StreamWorker),
 	}
 }
 
-// Subscribe connects a WebSocket client to a stream, automatically starting FFmpeg if not already running
-func (m *StreamManager) Subscribe(streamID string, client *websocket.Client) error {
-	stream, err := m.store.Get(streamID)
-	if err != nil {
-		return err
-	}
+// SubscribeURL connects a WebSocket client directly to an RTSP URL on demand
+func (m *StreamManager) SubscribeURL(rtspURL string, client *websocket.Client) error {
+	key := hashURL(rtspURL)
 
 	m.mu.Lock()
-	worker, exists := m.workers[streamID]
+	worker, exists := m.workers[key]
 	if !exists {
 		worker = &StreamWorker{
-			streamID:    streamID,
-			rtspURL:     stream.RTSPURL,
+			streamKey:   key,
+			rtspURL:     rtspURL,
 			ffmpegPath:  m.cfg.FFmpegPath,
 			subscribers: make(map[*websocket.Client]bool),
-			store:       m.store,
 			stopChan:    make(chan struct{}),
 			lastActive:  time.Now(),
-			onStopped: func(id string, deadWorker *StreamWorker) {
+			onStopped: func(k string, deadWorker *StreamWorker) {
 				m.mu.Lock()
-				if current, ok := m.workers[id]; ok && current == deadWorker {
-					delete(m.workers, id)
+				if current, ok := m.workers[k]; ok && current == deadWorker {
+					delete(m.workers, k)
 				}
 				m.mu.Unlock()
 			},
 		}
-		// Register subscriber FIRST before starting background runner to avoid race
 		worker.subscribers[client] = true
-		worker.store.SetViewerCount(worker.streamID, 1)
-
-		m.workers[streamID] = worker
+		m.workers[key] = worker
 		go worker.Run()
 		m.mu.Unlock()
 		return nil
@@ -92,28 +83,15 @@ func (m *StreamManager) Subscribe(streamID string, client *websocket.Client) err
 	return worker.AddSubscriber(client)
 }
 
-// Unsubscribe removes a client from a stream worker
-func (m *StreamManager) Unsubscribe(streamID string, client *websocket.Client) {
+// UnsubscribeURL removes a client from a stream worker by RTSP URL
+func (m *StreamManager) UnsubscribeURL(rtspURL string, client *websocket.Client) {
+	key := hashURL(rtspURL)
 	m.mu.RLock()
-	worker, exists := m.workers[streamID]
+	worker, exists := m.workers[key]
 	m.mu.RUnlock()
 
 	if exists {
 		worker.RemoveSubscriber(client)
-	}
-}
-
-// StopStream stops a running worker and terminates its FFmpeg process
-func (m *StreamManager) StopStream(streamID string) {
-	m.mu.Lock()
-	worker, exists := m.workers[streamID]
-	if exists {
-		delete(m.workers, streamID)
-	}
-	m.mu.Unlock()
-
-	if exists {
-		worker.Stop()
 	}
 }
 
@@ -132,7 +110,7 @@ func (m *StreamManager) StopAll() {
 	}
 }
 
-// AddSubscriber registers a client and updates viewer counts
+// AddSubscriber registers a client
 func (w *StreamWorker) AddSubscriber(client *websocket.Client) error {
 	w.subMu.Lock()
 	w.subscribers[client] = true
@@ -143,12 +121,11 @@ func (w *StreamWorker) AddSubscriber(client *websocket.Client) error {
 	w.lastActive = time.Now()
 	w.activeMu.Unlock()
 
-	w.store.SetViewerCount(w.streamID, count)
-	log.Printf("[StreamManager] Stream %s: client connected. Viewers: %d", w.streamID, count)
+	log.Printf("[StreamManager] Client connected to %s. Viewers: %d", models.MaskRTSPCredentials(w.rtspURL), count)
 	return nil
 }
 
-// RemoveSubscriber unregisters a client and updates viewer counts
+// RemoveSubscriber unregisters a client
 func (w *StreamWorker) RemoveSubscriber(client *websocket.Client) {
 	w.subMu.Lock()
 	delete(w.subscribers, client)
@@ -159,8 +136,7 @@ func (w *StreamWorker) RemoveSubscriber(client *websocket.Client) {
 	w.lastActive = time.Now()
 	w.activeMu.Unlock()
 
-	w.store.SetViewerCount(w.streamID, count)
-	log.Printf("[StreamManager] Stream %s: client disconnected. Viewers: %d", w.streamID, count)
+	log.Printf("[StreamManager] Client disconnected from %s. Viewers: %d", models.MaskRTSPCredentials(w.rtspURL), count)
 }
 
 // Run executes the stream pipeline with automatic error handling, true LIVE transition on data, and idle timeout
@@ -186,13 +162,11 @@ func (w *StreamWorker) Run() {
 			w.activeMu.RUnlock()
 
 			if idleDuration > IdleTimeout {
-				log.Printf("[StreamManager] Stream %s has 0 viewers for %v. Pausing worker.", w.streamID, IdleTimeout)
-				w.store.UpdateStatus(w.streamID, models.StatusStopped, "")
+				log.Printf("[StreamManager] Stream %s has 0 viewers for %v. Pausing worker.", models.MaskRTSPCredentials(w.rtspURL), IdleTimeout)
 				w.Stop()
 				return
 			}
 
-			// Interruptible sleep
 			select {
 			case <-w.stopChan:
 				return
@@ -216,8 +190,7 @@ func (w *StreamWorker) Run() {
 
 		stdout, err := processRef.Start(context.Background())
 		if err != nil {
-			log.Printf("[StreamManager] Stream %s FFmpeg start failed: %v", w.streamID, err)
-			w.updateStatusUnlessStopped(models.StatusError, err.Error())
+			log.Printf("[StreamManager] Stream %s FFmpeg start failed: %v", models.MaskRTSPCredentials(w.rtspURL), err)
 
 			select {
 			case <-w.stopChan:
@@ -228,10 +201,7 @@ func (w *StreamWorker) Run() {
 			continue
 		}
 
-		// Pipe loop: read binary packets and fan-out to subscribers with responsive chunk size
 		buf := make([]byte, 4096)
-		firstPacketReceived := false
-
 		for {
 			select {
 			case <-w.stopChan:
@@ -240,7 +210,6 @@ func (w *StreamWorker) Run() {
 			default:
 			}
 
-			// Check idle state during stdout read loop
 			w.subMu.RLock()
 			currentViewers := len(w.subscribers)
 			w.subMu.RUnlock()
@@ -250,7 +219,7 @@ func (w *StreamWorker) Run() {
 				idleDuration := time.Since(w.lastActive)
 				w.activeMu.RUnlock()
 				if idleDuration > IdleTimeout {
-					log.Printf("[StreamManager] Stream %s idle timeout reached during read. Stopping.", w.streamID)
+					log.Printf("[StreamManager] Stream %s idle timeout reached during read. Stopping.", models.MaskRTSPCredentials(w.rtspURL))
 					_ = processRef.Stop()
 					w.Stop()
 					return
@@ -259,12 +228,6 @@ func (w *StreamWorker) Run() {
 
 			n, readErr := stdout.Read(buf)
 			if n > 0 {
-				if !firstPacketReceived {
-					firstPacketReceived = true
-					w.updateStatusUnlessStopped(models.StatusLive, "")
-					backoff = 1 * time.Second
-				}
-
 				packet := make([]byte, n)
 				copy(packet, buf[:n])
 				w.broadcast(packet)
@@ -272,21 +235,14 @@ func (w *StreamWorker) Run() {
 
 			if readErr != nil {
 				if readErr != io.EOF {
-					log.Printf("[StreamManager] Stream %s read error: %v", w.streamID, readErr)
+					log.Printf("[StreamManager] Stream %s read error: %v", models.MaskRTSPCredentials(w.rtspURL), readErr)
 				}
 				break
 			}
 		}
 
 		_ = processRef.Stop()
-		stderrMsg := processRef.LastStderr()
-		if stderrMsg != "" {
-			w.updateStatusUnlessStopped(models.StatusError, stderrMsg)
-		} else {
-			w.updateStatusUnlessStopped(models.StatusError, "stream connection lost")
-		}
 
-		// Interruptible backoff
 		select {
 		case <-w.stopChan:
 			return
@@ -305,7 +261,6 @@ func (w *StreamWorker) broadcast(data []byte) {
 		select {
 		case client.Send <- data:
 		default:
-			// Client's channel is full; drop packet to preserve low latency
 		}
 	}
 }
@@ -323,23 +278,15 @@ func (w *StreamWorker) Stop() {
 			_ = processRef.Stop()
 		}
 
-		w.store.UpdateStatus(w.streamID, models.StatusStopped, "")
-
 		if w.onStopped != nil {
-			w.onStopped(w.streamID, w)
+			w.onStopped(w.streamKey, w)
 		}
 	})
 }
 
-// updateStatusUnlessStopped ensures an exiting worker does not overwrite STOPPED with ERROR
-func (w *StreamWorker) updateStatusUnlessStopped(status models.StreamStatus, errorMsg string) {
-	w.procMu.RLock()
-	stopped := w.isStopped
-	w.procMu.RUnlock()
-
-	if !stopped {
-		w.store.UpdateStatus(w.streamID, status, errorMsg)
-	}
+func hashURL(u string) string {
+	h := sha256.Sum256([]byte(u))
+	return hex.EncodeToString(h[:8])
 }
 
 func min(a, b time.Duration) time.Duration {

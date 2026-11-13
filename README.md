@@ -9,11 +9,10 @@ StreamForge bridges the gap between RTSP video feeds (IP cameras, CCTV, NVRs, dr
 ## 🌟 Key Features
 
 - **Sub-Second Playback Latency:** Stream live RTSP feeds with ~100ms end-to-end delay without buffering pauses.
+- **100% Stateless Backend:** No database, no in-memory CRUD storage. FFmpeg runs on-demand per stream and stops when disconnected.
 - **Multi-Camera Grid Layout:** Simultaneous multi-stream viewing with responsive layouts (Auto, Single Focus, 2x2, 3x3).
-- **Resource-Efficient Fan-Out Architecture:** 1 FFmpeg process per camera shared across any number of connected viewers, minimizing CPU & network usage.
+- **Client-Side State Persistence:** Camera streams persist cleanly in browser `localStorage`. No data loss on server restarts.
 - **Auto-Idle Resource Reclamation:** Automatically terminates idle FFmpeg processes after 30 seconds with 0 viewers to preserve host CPU & memory.
-- **Resilient Connection Recovery:** Handles sudden camera disconnects with exponential backoff auto-reconnection.
-- **Zero-Config Persistent Feeds:** Integrated browser `localStorage` camera rehydration ensures streams seamlessly resume even after server reboots or browser refreshes.
 - **Security & Privacy First:** Built-in SSRF protection (blocking cloud metadata IPs), strict URL scheme validation, and automatic credential masking (`rtsp://***:***@host`).
 - **Modern Tech Stack:** Go 1.22+ standard HTTP routing, Gorilla WebSocket, React 19, TypeScript, and Tailwind CSS.
 
@@ -31,9 +30,9 @@ StreamForge bridges the gap between RTSP video feeds (IP cameras, CCTV, NVRs, dr
 │       StreamForge Backend       │
 │           (Go 1.22+)            │
 │                                 │
-│  • Stream Store (In-Memory)     │
-│  • FFmpeg Worker (MPEG-TS)      │
-│  • WebSocket Fan-Out Hub        │
+│  • Stateless On-Demand Hub      │
+│  • FFmpeg Transcoder (MPEG-TS)  │
+│  • WebSocket Fan-Out Streamer   │
 └────────────────+────────────────┘
                  │ (Binary MPEG-TS over WS)
                  ▼
@@ -101,36 +100,19 @@ Open another terminal and publish test video feeds:
 ```bash
 # Camera 1 (Live running timestamp & frame counter)
 ffmpeg -re -f lavfi -i "color=c=0x0f172a:s=1280x720:r=25" -vf "drawtext=fontfile='C\:/Windows/Fonts/arial.ttf':text='LIVE CAMERA 01':x=(w-text_w)/2:y=180:fontsize=48:fontcolor=0x38bdf8,drawtext=fontfile='C\:/Windows/Fonts/arial.ttf':text='TIME\: %{pts\:hms}':x=(w-text_w)/2:y=380:fontsize=72:fontcolor=white:box=1:boxcolor=0x000000@0.8:boxborderw=15" -pix_fmt yuv420p -c:v libx264 -preset ultrafast -tune zerolatency -f rtsp -rtsp_transport tcp rtsp://localhost:8554/live/camera1
-
-# Camera 2 (SMPTE Color Bars)
-ffmpeg -re -f lavfi -i smptebars=size=1280x720:rate=25 -pix_fmt yuv420p -c:v libx264 -preset ultrafast -tune zerolatency -f rtsp -rtsp_transport tcp rtsp://localhost:8554/live/camera2
 ```
 
 In the StreamForge UI, paste:
 - `rtsp://localhost:8554/live/camera1`
-- `rtsp://localhost:8554/live/camera2`
 
 ---
 
-## 📡 REST API Reference
+## 📡 API Reference
 
-| Method | Endpoint | Description |
+| Endpoint | Protocol | Description |
 | :--- | :--- | :--- |
-| `GET` | `/health` | Server health check |
-| `GET` | `/api/streams` | List all active streams |
-| `POST` | `/api/streams` | Register a new RTSP stream |
-| `DELETE` | `/api/streams/{id}` | Terminate and remove a stream |
-| `WS` | `/ws/stream/{id}` | Live binary video WebSocket stream |
-
----
-
-## 📦 Deployment (Docker)
-
-```bash
-# Build & run backend container
-docker build -t streamforge-backend ./backend
-docker run -p 8088:8088 streamforge-backend
-```
+| `/health` | HTTP GET | Server health check (`{"status":"ok"}`) |
+| `/ws/live?url=<rtsp_url>` | WebSocket | On-demand live binary MPEG-TS video stream |
 
 ---
 

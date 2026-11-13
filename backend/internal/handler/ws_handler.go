@@ -3,46 +3,48 @@ package handler
 import (
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 
-	"github.com/gorilla/websocket"
-	"streamforge-backend/internal/service"
 	"streamforge-backend/internal/streamer"
 	ws "streamforge-backend/internal/websocket"
+
+	"github.com/gorilla/websocket"
 )
 
-// WSHandler handles WebSocket connections for live RTSP streaming
+// WSHandler handles on-demand WebSocket connections for live RTSP streaming
 type WSHandler struct {
-	store    *service.StreamStore
 	upgrader websocket.Upgrader
 	manager  *streamer.StreamManager
 }
 
 // NewWSHandler creates a new WebSocket handler instance
-func NewWSHandler(store *service.StreamStore, upgrader websocket.Upgrader, manager *streamer.StreamManager) *WSHandler {
+func NewWSHandler(upgrader websocket.Upgrader, manager *streamer.StreamManager) *WSHandler {
 	return &WSHandler{
-		store:    store,
 		upgrader: upgrader,
 		manager:  manager,
 	}
 }
 
-// ServeWS validates the stream ID, upgrades the HTTP connection, and streams video frames
+// ServeWS upgrades the HTTP connection and streams video on-demand from the provided RTSP URL
 func (h *WSHandler) ServeWS(w http.ResponseWriter, r *http.Request) {
-	streamID := r.PathValue("id")
-	if streamID == "" {
-		streamID = strings.TrimPrefix(r.URL.Path, "/ws/stream/")
-		streamID = strings.Trim(streamID, "/")
+	// 1. Extract RTSP URL from query parameter: /ws/live?url=rtsp://...
+	rawURL := strings.TrimSpace(r.URL.Query().Get("url"))
+	if rawURL == "" {
+		// Fallback for paths: /ws/stream/{id}
+		rawURL = strings.TrimPrefix(r.URL.Path, "/ws/stream/")
+		rawURL = strings.Trim(rawURL, "/")
 	}
 
-	if streamID == "" {
-		WriteError(w, http.StatusBadRequest, "stream ID is required")
+	if rawURL == "" {
+		WriteError(w, http.StatusBadRequest, "rtsp url query parameter (?url=rtsp://...) is required")
 		return
 	}
 
-	// Validate stream exists BEFORE upgrading WebSocket to avoid leaking connections
-	if _, err := h.store.Get(streamID); err != nil {
-		WriteError(w, http.StatusNotFound, "stream not found")
+	// Validate RTSP URL
+	parsedURL, err := url.Parse(rawURL)
+	if err != nil || (parsedURL.Scheme != "rtsp" && parsedURL.Scheme != "rtsps") || parsedURL.Hostname() == "" {
+		WriteError(w, http.StatusBadRequest, "invalid RTSP URL: must start with rtsp:// or rtsps://")
 		return
 	}
 
@@ -54,19 +56,17 @@ func (h *WSHandler) ServeWS(w http.ResponseWriter, r *http.Request) {
 
 	client := ws.NewClient(conn)
 
-	// Subscribe client to stream manager (starts FFmpeg if not already running)
-	if err := h.manager.Subscribe(streamID, client); err != nil {
-		log.Printf("[WebSocket] Failed to subscribe client to stream %s: %v", streamID, err)
+	// Subscribe client to stream manager using the RTSP URL directly
+	if err := h.manager.SubscribeURL(rawURL, client); err != nil {
+		log.Printf("[WebSocket] Failed to start stream for %s: %v", rawURL, err)
 		_ = conn.Close()
 		return
 	}
 
-	// Clean up subscription when client disconnects
 	cleanup := func() {
-		h.manager.Unsubscribe(streamID, client)
+		h.manager.UnsubscribeURL(rawURL, client)
 	}
 
-	// Start read and write pumps in goroutines
 	go client.WritePump(cleanup)
 	client.ReadPump(cleanup)
 }

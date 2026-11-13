@@ -43,7 +43,7 @@ export const StreamPlayer: React.FC<StreamPlayerProps> = ({ stream, onDelete }) 
     setIsLive(false);
     setPlayerError(null);
 
-    const wsUrl = getStreamWebSocketUrl(stream.id);
+    const wsUrl = getStreamWebSocketUrl(stream.rtsp_url);
 
     try {
       playerRef.current = new window.JSMpeg.Player(wsUrl, {
