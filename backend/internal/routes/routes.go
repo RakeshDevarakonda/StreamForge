@@ -26,5 +26,4 @@ func Register(
 
 	// On-demand Stateless WebSocket streaming route: /ws/live?url=rtsp://...
 	mux.HandleFunc("/ws/live", wsH.ServeWS)
-	mux.HandleFunc("/ws/stream/", wsH.ServeWS)
 }

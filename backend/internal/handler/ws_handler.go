@@ -28,14 +28,7 @@ func NewWSHandler(upgrader websocket.Upgrader, manager *streamer.StreamManager) 
 
 // ServeWS upgrades the HTTP connection and streams video on-demand from the provided RTSP URL
 func (h *WSHandler) ServeWS(w http.ResponseWriter, r *http.Request) {
-	// 1. Extract RTSP URL from query parameter: /ws/live?url=rtsp://...
 	rawURL := strings.TrimSpace(r.URL.Query().Get("url"))
-	if rawURL == "" {
-		// Fallback for paths: /ws/stream/{id}
-		rawURL = strings.TrimPrefix(r.URL.Path, "/ws/stream/")
-		rawURL = strings.Trim(rawURL, "/")
-	}
-
 	if rawURL == "" {
 		WriteError(w, http.StatusBadRequest, "rtsp url query parameter (?url=rtsp://...) is required")
 		return
