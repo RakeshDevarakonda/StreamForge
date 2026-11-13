@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Radio, RefreshCw, Cpu, Layers } from 'lucide-react';
 import type { Stream, CreateStreamPayload } from './types/stream';
 import { fetchStreams, createStream, deleteStream } from './services/api';
-import { getSavedCameras, saveCameraToStorage, removeCameraFromStorage } from './services/storage';
+import { getSavedCameras, saveCameraToStorage, removeCameraFromStorage, normalizeRtspUrl } from './services/storage';
 import { AddStreamForm } from './components/AddStreamForm';
 import { StreamGrid } from './components/StreamGrid';
 import type { GridLayout } from './components/StreamGrid';
@@ -14,6 +14,8 @@ export const App: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
   const loadStreams = useCallback(async () => {
     try {
       setFetchError(null);
@@ -22,11 +24,10 @@ export const App: React.FC = () => {
       // Auto-rehydrate from localStorage if backend was restarted or empty
       const savedCameras = getSavedCameras();
       if (savedCameras.length > 0) {
-        const existingUrls = new Set(backendStreams.map((s) => s.rtsp_url));
-        const missingFromBackend = savedCameras.filter((c) => !existingUrls.has(c.rtsp_url));
+        const existingNorms = new Set(backendStreams.map((s) => normalizeRtspUrl(s.rtsp_url)));
+        const missingFromBackend = savedCameras.filter((c) => !existingNorms.has(normalizeRtspUrl(c.rtsp_url)));
 
         if (missingFromBackend.length > 0) {
-          // Re-register saved cameras in backend so FFmpeg can stream them
           for (const cam of missingFromBackend) {
             try {
               const registered = await createStream({
@@ -35,7 +36,7 @@ export const App: React.FC = () => {
               });
               backendStreams.push(registered);
             } catch {
-              // Ignore conflicts if already being registered
+              // Ignore conflicts
             }
           }
         }
@@ -76,16 +77,17 @@ export const App: React.FC = () => {
   };
 
   const handleDeleteStream = async (id: string) => {
+    setDeleteError(null);
     try {
       const target = streams.find((s) => s.id === id);
       await deleteStream(id);
       if (target) {
-        // Remove from browser localStorage
         removeCameraFromStorage(target.rtsp_url);
       }
       setStreams((prev) => prev.filter((s) => s.id !== id));
-    } catch (err) {
-      console.error('Delete stream error:', err);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to delete stream';
+      setDeleteError(msg);
     }
   };
 
@@ -149,6 +151,19 @@ export const App: React.FC = () => {
               className="px-3.5 py-1.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 text-xs font-medium rounded-xl transition-colors cursor-pointer shrink-0 self-start sm:self-auto"
             >
               Retry Connection
+            </button>
+          </div>
+        )}
+
+        {/* Delete Error Banner */}
+        {deleteError && (
+          <div className="p-4 bg-rose-500/10 border border-rose-500/30 rounded-2xl flex items-center justify-between text-rose-300 text-xs">
+            <span>{deleteError}</span>
+            <button
+              onClick={() => setDeleteError(null)}
+              className="text-rose-400 hover:text-white font-semibold cursor-pointer ml-3"
+            >
+              Dismiss
             </button>
           </div>
         )}

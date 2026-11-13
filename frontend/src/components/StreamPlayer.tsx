@@ -14,12 +14,19 @@ export const StreamPlayer: React.FC<StreamPlayerProps> = ({ stream, onDelete }) 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const playerRef = useRef<any>(null);
 
-  const [isPlaying, setIsPlaying] = useState<boolean>(true);
+  const [isPlaying, setIsPlaying] = useState<boolean>(false);
+  const [isLive, setIsLive] = useState<boolean>(false);
   const [isConnecting, setIsConnecting] = useState<boolean>(true);
   const [playerError, setPlayerError] = useState<string | null>(null);
 
   const initPlayer = useCallback(() => {
-    if (!canvasRef.current || !window.JSMpeg) return;
+    if (!canvasRef.current) return;
+
+    if (!window.JSMpeg) {
+      setIsConnecting(false);
+      setPlayerError('JSMpeg player library not available');
+      return;
+    }
 
     // Cleanup previous player instance
     if (playerRef.current) {
@@ -32,6 +39,8 @@ export const StreamPlayer: React.FC<StreamPlayerProps> = ({ stream, onDelete }) 
     }
 
     setIsConnecting(true);
+    setIsPlaying(false);
+    setIsLive(false);
     setPlayerError(null);
 
     const wsUrl = getStreamWebSocketUrl(stream.id);
@@ -46,14 +55,24 @@ export const StreamPlayer: React.FC<StreamPlayerProps> = ({ stream, onDelete }) 
         onSourceEstablished: () => {
           setIsConnecting(false);
           setIsPlaying(true);
+          setIsLive(true);
           setPlayerError(null);
+        },
+        onSourceCompleted: () => {
+          setIsConnecting(false);
+          setIsLive(false);
+          setIsPlaying(false);
+          setPlayerError('Stream closed by server');
         },
         onStalled: () => {
           setIsConnecting(true);
+          setIsLive(false);
         },
       });
     } catch (err: unknown) {
       setIsConnecting(false);
+      setIsPlaying(false);
+      setIsLive(false);
       setPlayerError(err instanceof Error ? err.message : 'Failed to initialize player');
     }
   }, [stream.id]);
@@ -80,11 +99,17 @@ export const StreamPlayer: React.FC<StreamPlayerProps> = ({ stream, onDelete }) 
     }
 
     if (isPlaying) {
-      playerRef.current.pause();
+      // Cleanly pause and destroy current WebSocket connection so backend stops streaming
+      try {
+        playerRef.current.destroy();
+      } catch {
+        // ignore
+      }
+      playerRef.current = null;
       setIsPlaying(false);
+      setIsLive(false);
     } else {
-      playerRef.current.play();
-      setIsPlaying(true);
+      initPlayer();
     }
   };
 
@@ -121,7 +146,7 @@ export const StreamPlayer: React.FC<StreamPlayerProps> = ({ stream, onDelete }) 
       <div className="flex items-center justify-between px-4 py-3 bg-slate-900/80 border-b border-slate-800">
         <div className="flex items-center space-x-2.5 overflow-hidden">
           <div className="relative flex items-center justify-center">
-            {isPlaying && !playerError ? (
+            {isLive && !playerError ? (
               <span className="flex h-3 w-3">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>

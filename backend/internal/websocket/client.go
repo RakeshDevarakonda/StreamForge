@@ -18,8 +18,8 @@ const (
 	// pingPeriod sends pings to peer with this period (must be less than pongWait)
 	pingPeriod = (pongWait * 9) / 10
 
-	// sendBufferSize is the capacity of the binary video chunk channel
-	sendBufferSize = 512
+	// sendBufferSize is the capacity of the binary video chunk channel (optimized for low memory usage)
+	sendBufferSize = 64
 )
 
 // Client represents a connected WebSocket viewer watching a stream
