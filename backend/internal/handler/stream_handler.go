@@ -35,27 +35,6 @@ func (h *StreamHandler) ListStreams(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusOK, sanitized)
 }
 
-// GetStream returns details for a single stream by ID
-func (h *StreamHandler) GetStream(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	if id == "" {
-		WriteError(w, http.StatusBadRequest, "stream ID is required")
-		return
-	}
-
-	stream, err := h.store.Get(id)
-	if err != nil {
-		if errors.Is(err, service.ErrStreamNotFound) {
-			WriteError(w, http.StatusNotFound, "stream not found")
-			return
-		}
-		WriteError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	WriteJSON(w, http.StatusOK, stream.Sanitize())
-}
-
 // CreateStream registers a new RTSP stream
 func (h *StreamHandler) CreateStream(w http.ResponseWriter, r *http.Request) {
 	var req models.CreateStreamRequest

@@ -118,7 +118,6 @@ In the StreamForge UI, paste:
 | :--- | :--- | :--- |
 | `GET` | `/health` | Server health check |
 | `GET` | `/api/streams` | List all active streams |
-| `GET` | `/api/streams/{id}` | Get specific stream details |
 | `POST` | `/api/streams` | Register a new RTSP stream |
 | `DELETE` | `/api/streams/{id}` | Terminate and remove a stream |
 | `WS` | `/ws/stream/{id}` | Live binary video WebSocket stream |

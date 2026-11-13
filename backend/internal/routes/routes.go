@@ -29,7 +29,6 @@ func Register(
 
 	// Stream REST endpoints
 	mux.HandleFunc("GET /api/streams", streamH.ListStreams)
-	mux.HandleFunc("GET /api/streams/{id}", streamH.GetStream)
 	mux.HandleFunc("POST /api/streams", streamH.CreateStream)
 	mux.HandleFunc("DELETE /api/streams/{id}", streamH.DeleteStream)
 
