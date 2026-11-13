@@ -1,14 +1,12 @@
-import type { CreateStreamPayload } from '../types/stream';
-
 const LOCAL_STORAGE_KEY = 'streamforge_saved_cameras';
 
 export interface SavedCamera {
+  id: string;
   name: string;
   rtsp_url: string;
-  saved_at: string;
 }
 
-// Normalize RTSP URL for robust comparison (handles masked vs unmasked credentials)
+// Normalize RTSP URL for robust comparison
 export function normalizeRtspUrl(raw: string): string {
   try {
     const u = new URL(raw);
@@ -30,27 +28,20 @@ export function getSavedCameras(): SavedCamera[] {
   }
 }
 
-// Save a newly added camera to localStorage (prevents duplicates by normalized rtsp_url)
-export function saveCameraToStorage(camera: CreateStreamPayload): void {
+// Save a newly added camera to localStorage (prevents duplicates)
+export function saveCameraToStorage(camera: SavedCamera): void {
   try {
     const existing = getSavedCameras();
     const targetNorm = normalizeRtspUrl(camera.rtsp_url);
     const filtered = existing.filter((c) => normalizeRtspUrl(c.rtsp_url) !== targetNorm);
-    const updated: SavedCamera[] = [
-      ...filtered,
-      {
-        name: camera.name,
-        rtsp_url: camera.rtsp_url,
-        saved_at: new Date().toISOString(),
-      },
-    ];
+    const updated: SavedCamera[] = [...filtered, camera];
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
   } catch (err) {
     console.error('Failed to save camera to localStorage:', err);
   }
 }
 
-// Remove a camera from localStorage by normalized rtsp_url
+// Remove a camera from localStorage by rtsp_url
 export function removeCameraFromStorage(rtspUrl: string): void {
   try {
     const existing = getSavedCameras();
