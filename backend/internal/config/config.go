@@ -85,6 +85,16 @@ func resolveFFmpegPath() string {
 		return systemPath
 	}
 
+	// Automatic local folder discovery (for Render native environment without root: ./bin/ffmpeg)
+	if localBinPath, err := exec.LookPath("./bin/ffmpeg"); err == nil {
+		log.Printf("[Config] Found FFmpeg in relative local folder: %s", localBinPath)
+		return localBinPath
+	}
+	if _, err := os.Stat("bin/ffmpeg"); err == nil {
+		log.Println("[Config] Found FFmpeg at bin/ffmpeg")
+		return "./bin/ffmpeg"
+	}
+
 	// Windows fallback: Check WinGet default installation folder if terminal hasn't refreshed PATH
 	localAppData := os.Getenv("LOCALAPPDATA")
 	if localAppData != "" {
