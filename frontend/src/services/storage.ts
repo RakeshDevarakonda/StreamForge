@@ -16,13 +16,26 @@ export function normalizeRtspUrl(raw: string): string {
   }
 }
 
-// Get all saved cameras from browser localStorage
+// Get all saved cameras from browser localStorage (de-duplicates on read)
 export function getSavedCameras(): SavedCamera[] {
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed)) return [];
+
+    // Ensure no duplicates exist in storage
+    const seen = new Set<string>();
+    const unique: SavedCamera[] = [];
+    for (const item of parsed) {
+      if (!item || !item.rtsp_url) continue;
+      const norm = normalizeRtspUrl(item.rtsp_url);
+      if (!seen.has(norm)) {
+        seen.add(norm);
+        unique.push(item);
+      }
+    }
+    return unique;
   } catch {
     return [];
   }

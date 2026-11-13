@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Radio, Plus } from 'lucide-react';
 import type { CameraStream } from './types/stream';
-import { getSavedCameras, saveCameraToStorage, removeCameraFromStorage } from './services/storage';
+import { getSavedCameras, saveCameraToStorage, removeCameraFromStorage, normalizeRtspUrl } from './services/storage';
 import { StreamGrid } from './components/StreamGrid';
 import type { GridLayout } from './components/StreamGrid';
 
@@ -25,6 +25,13 @@ export const App: React.FC = () => {
     const trimmed = url.trim();
     if (!trimmed.startsWith('rtsp://') && !trimmed.startsWith('rtsps://')) {
       setError('URL must start with rtsp:// or rtsps://');
+      return;
+    }
+
+    const normInput = normalizeRtspUrl(trimmed);
+    const isDuplicate = streams.some((s) => normalizeRtspUrl(s.rtsp_url) === normInput);
+    if (isDuplicate) {
+      setError('This camera stream is already added.');
       return;
     }
 
