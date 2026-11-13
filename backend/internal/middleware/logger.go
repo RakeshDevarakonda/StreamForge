@@ -1,12 +1,15 @@
 package middleware
 
 import (
+	"bufio"
+	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"time"
 )
 
-// responseWriterInterceptor captures the HTTP status code
+// responseWriterInterceptor captures the HTTP status code while preserving http.Hijacker & http.Flusher
 type responseWriterInterceptor struct {
 	http.ResponseWriter
 	statusCode int
@@ -15,6 +18,21 @@ type responseWriterInterceptor struct {
 func (w *responseWriterInterceptor) WriteHeader(code int) {
 	w.statusCode = code
 	w.ResponseWriter.WriteHeader(code)
+}
+
+// Hijack implements http.Hijacker so WebSockets can take over the raw TCP connection
+func (w *responseWriterInterceptor) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	if hijacker, ok := w.ResponseWriter.(http.Hijacker); ok {
+		return hijacker.Hijack()
+	}
+	return nil, nil, fmt.Errorf("underlying ResponseWriter does not implement http.Hijacker")
+}
+
+// Flush implements http.Flusher for streaming responses
+func (w *responseWriterInterceptor) Flush() {
+	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
 }
 
 // Logger logs each incoming HTTP request with timing, method, URL, and status code
@@ -38,3 +56,4 @@ func Logger(next http.Handler) http.Handler {
 		)
 	})
 }
+
