@@ -26,9 +26,12 @@ func NewWSHandler(upgrader websocket.Upgrader, manager *streamer.StreamManager) 
 
 // ServeWS upgrades the HTTP connection and streams video frames to the client
 func (h *WSHandler) ServeWS(w http.ResponseWriter, r *http.Request) {
-	// Extract stream ID from /ws/stream/{id}
-	streamID := strings.TrimPrefix(r.URL.Path, "/ws/stream/")
-	streamID = strings.Trim(streamID, "/")
+	streamID := r.PathValue("id")
+	if streamID == "" {
+		// Fallback for paths without wildcards
+		streamID = strings.TrimPrefix(r.URL.Path, "/ws/stream/")
+		streamID = strings.Trim(streamID, "/")
+	}
 
 	if streamID == "" {
 		WriteError(w, http.StatusBadRequest, "stream ID is required")

@@ -31,27 +31,6 @@ func (h *StreamHandler) ListStreams(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusOK, streams)
 }
 
-// GetStream returns details for a single stream by ID
-func (h *StreamHandler) GetStream(w http.ResponseWriter, r *http.Request) {
-	id := extractIDFromPath(r.URL.Path, "/api/streams/")
-	if id == "" {
-		WriteError(w, http.StatusBadRequest, "stream ID is required")
-		return
-	}
-
-	stream, err := h.store.Get(id)
-	if err != nil {
-		if errors.Is(err, service.ErrStreamNotFound) {
-			WriteError(w, http.StatusNotFound, "stream not found")
-			return
-		}
-		WriteError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	WriteJSON(w, http.StatusOK, stream)
-}
-
 // CreateStream registers a new RTSP stream
 func (h *StreamHandler) CreateStream(w http.ResponseWriter, r *http.Request) {
 	var req models.CreateStreamRequest
@@ -85,7 +64,7 @@ func (h *StreamHandler) CreateStream(w http.ResponseWriter, r *http.Request) {
 
 // DeleteStream removes a registered stream and stops any active worker
 func (h *StreamHandler) DeleteStream(w http.ResponseWriter, r *http.Request) {
-	id := extractIDFromPath(r.URL.Path, "/api/streams/")
+	id := r.PathValue("id")
 	if id == "" {
 		WriteError(w, http.StatusBadRequest, "stream ID is required")
 		return
@@ -109,8 +88,3 @@ func (h *StreamHandler) DeleteStream(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// extractIDFromPath extracts the ID parameter from URL paths like /api/streams/{id}
-func extractIDFromPath(path, prefix string) string {
-	trimmed := strings.TrimPrefix(path, prefix)
-	return strings.Trim(trimmed, "/")
-}
