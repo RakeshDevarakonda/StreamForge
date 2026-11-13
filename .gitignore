@@ -41,7 +41,7 @@ yarn-error.log*
 Thumbs.db
 
 # Media & Temporary files
-*.ts
+*.ts_media
 *.mp4
 *.mkv
 *.flv

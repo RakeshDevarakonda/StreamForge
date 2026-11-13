@@ -57,8 +57,9 @@ export const App: React.FC = () => {
       try {
         const data = await fetchStreams();
         setStreams(data);
-      } catch {
-        // Silent polling error handling
+        setFetchError(null);
+      } catch (err) {
+        setFetchError(err instanceof Error ? err.message : 'Backend connection lost');
       }
     }, 5000);
     return () => clearInterval(interval);
@@ -143,7 +144,7 @@ export const App: React.FC = () => {
             <div>
               <p className="text-sm font-semibold">Backend Connection Failed</p>
               <p className="text-xs text-rose-400/80 mt-0.5">
-                Unable to reach Go server at http://localhost:8080. Ensure the backend server is running.
+                {fetchError}. Ensure the backend server is running.
               </p>
             </div>
             <button

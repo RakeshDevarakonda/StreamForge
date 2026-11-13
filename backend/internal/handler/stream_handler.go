@@ -59,6 +59,10 @@ func (h *StreamHandler) CreateStream(w http.ResponseWriter, r *http.Request) {
 			WriteError(w, http.StatusConflict, err.Error())
 			return
 		}
+		if errors.Is(err, service.ErrMaxStreams) {
+			WriteError(w, http.StatusTooManyRequests, err.Error())
+			return
+		}
 		WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}

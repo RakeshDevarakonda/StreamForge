@@ -67,6 +67,13 @@ export const StreamPlayer: React.FC<StreamPlayerProps> = ({ stream, onDelete }) 
         onStalled: () => {
           setIsConnecting(true);
           setIsLive(false);
+          // Set timeout to avoid endless spinner if connection is permanently stalled
+          setTimeout(() => {
+            if (!playerRef.current?.isPlaying) {
+              setIsConnecting(false);
+              setPlayerError('Stream stalled: Reconnection timeout');
+            }
+          }, 8000);
         },
       });
     } catch (err: unknown) {
@@ -222,19 +229,21 @@ export const StreamPlayer: React.FC<StreamPlayerProps> = ({ stream, onDelete }) 
             </button>
           </div>
 
-          <div className="flex items-center space-x-2">
-            <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center space-x-1">
-              <Radio className="w-3 h-3 animate-pulse" />
-              <span>LIVE</span>
-            </span>
-            <button
-              onClick={handleFullscreen}
-              className="p-1.5 bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg transition-colors cursor-pointer"
-              title="Fullscreen"
-            >
-              <Maximize2 className="w-4 h-4" />
-            </button>
-          </div>
+          {isLive && (
+            <div className="flex items-center space-x-2">
+              <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center space-x-1">
+                <Radio className="w-3 h-3 animate-pulse" />
+                <span>LIVE</span>
+              </span>
+              <button
+                onClick={handleFullscreen}
+                className="p-1.5 bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg transition-colors cursor-pointer"
+                title="Fullscreen"
+              >
+                <Maximize2 className="w-4 h-4" />
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
