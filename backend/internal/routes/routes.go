@@ -17,7 +17,7 @@ func Register(
 	upgrader ws.Upgrader,
 ) {
 	streamH := handler.NewStreamHandler(store, manager)
-	wsH := handler.NewWSHandler(upgrader.GetGorillaUpgrader(), manager)
+	wsH := handler.NewWSHandler(store, upgrader.GetGorillaUpgrader(), manager)
 
 	// Health check route
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
@@ -29,6 +29,7 @@ func Register(
 
 	// Stream REST endpoints
 	mux.HandleFunc("GET /api/streams", streamH.ListStreams)
+	mux.HandleFunc("GET /api/streams/{id}", streamH.GetStream)
 	mux.HandleFunc("POST /api/streams", streamH.CreateStream)
 	mux.HandleFunc("DELETE /api/streams/{id}", streamH.DeleteStream)
 

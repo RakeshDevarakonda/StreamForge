@@ -26,6 +26,8 @@ type StreamWorker struct {
 	lastActive   time.Time
 	isAlive      bool
 	workerMu     sync.Mutex
+	stopOnce     sync.Once
+	onStopped    func(streamID string)
 }
 
 // StreamManager coordinates all active StreamWorkers
@@ -63,6 +65,11 @@ func (m *StreamManager) Subscribe(streamID string, client *websocket.Client) err
 			store:       m.store,
 			stopChan:    make(chan struct{}),
 			lastActive:  time.Now(),
+			onStopped: func(id string) {
+				m.mu.Lock()
+				delete(m.workers, id)
+				m.mu.Unlock()
+			},
 		}
 		m.workers[streamID] = worker
 		go worker.Run()
@@ -217,7 +224,12 @@ func (w *StreamWorker) Run() {
 			w.store.UpdateStatus(w.streamID, models.StatusError, "stream connection lost")
 		}
 
-		time.Sleep(backoff)
+		// Reconnection backoff timer responds immediately to stop cancellation
+		select {
+		case <-w.stopChan:
+			return
+		case <-time.After(backoff):
+		}
 		backoff = min(backoff*2, maxBackoff)
 	}
 }
@@ -236,22 +248,24 @@ func (w *StreamWorker) broadcast(data []byte) {
 	}
 }
 
-// Stop cleanly terminates the worker
+// Stop cleanly terminates the worker (safe for multiple calls)
 func (w *StreamWorker) Stop() {
-	w.workerMu.Lock()
-	defer w.workerMu.Unlock()
+	w.stopOnce.Do(func() {
+		w.workerMu.Lock()
+		w.isAlive = false
+		w.workerMu.Unlock()
 
-	if !w.isAlive {
-		return
-	}
-	w.isAlive = false
+		close(w.stopChan)
+		if w.process != nil {
+			_ = w.process.Stop()
+		}
 
-	close(w.stopChan)
-	if w.process != nil {
-		_ = w.process.Stop()
-	}
+		w.store.UpdateStatus(w.streamID, models.StatusStopped, "")
 
-	w.store.UpdateStatus(w.streamID, models.StatusStopped, "")
+		if w.onStopped != nil {
+			w.onStopped(w.streamID)
+		}
+	})
 }
 
 func min(a, b time.Duration) time.Duration {

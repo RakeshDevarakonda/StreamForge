@@ -48,13 +48,13 @@ func main() {
 	rootHandler = middleware.Recoverer(rootHandler)
 
 	// 7. Configure HTTP server
+	// Note: WriteTimeout is NOT set globally because it terminates long-lived WebSocket streaming connections
 	addr := fmt.Sprintf(":%s", cfg.Port)
 	server := &http.Server{
-		Addr:         addr,
-		Handler:      rootHandler,
-		ReadTimeout:  30 * time.Second,
-		WriteTimeout: 30 * time.Second,
-		IdleTimeout:  120 * time.Second,
+		Addr:              addr,
+		Handler:           rootHandler,
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	// 8. Graceful shutdown handler

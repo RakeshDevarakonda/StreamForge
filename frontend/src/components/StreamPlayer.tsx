@@ -97,6 +97,21 @@ export const StreamPlayer: React.FC<StreamPlayerProps> = ({ stream, onDelete }) 
     }
   };
 
+  // Helper to safely mask credentials in RTSP URLs (e.g., rtsp://user:pass@host -> rtsp://***:***@host)
+  const sanitizeUrl = (url: string) => {
+    try {
+      const parsed = new URL(url);
+      if (parsed.username || parsed.password) {
+        parsed.username = '***';
+        parsed.password = '***';
+        return parsed.toString();
+      }
+      return url;
+    } catch {
+      return url.replace(/\/\/([^:]+):([^@]+)@/, '//***:***@');
+    }
+  };
+
   return (
     <div
       ref={containerRef}
@@ -200,8 +215,8 @@ export const StreamPlayer: React.FC<StreamPlayerProps> = ({ stream, onDelete }) 
 
       {/* URL Footer */}
       <div className="px-3.5 py-2 bg-slate-950/60 border-t border-slate-800/50 flex items-center justify-between text-[11px] text-slate-400">
-        <span className="truncate max-w-[280px] font-mono text-slate-500" title={stream.rtsp_url}>
-          {stream.rtsp_url}
+        <span className="truncate max-w-[280px] font-mono text-slate-500" title={sanitizeUrl(stream.rtsp_url)}>
+          {sanitizeUrl(stream.rtsp_url)}
         </span>
         <span className="shrink-0 text-slate-500">MPEG-TS / WS</span>
       </div>

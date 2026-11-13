@@ -6,35 +6,43 @@ import (
 	"strings"
 
 	"github.com/gorilla/websocket"
+	"streamforge-backend/internal/service"
 	"streamforge-backend/internal/streamer"
 	ws "streamforge-backend/internal/websocket"
 )
 
 // WSHandler handles WebSocket connections for live RTSP streaming
 type WSHandler struct {
+	store    *service.StreamStore
 	upgrader websocket.Upgrader
 	manager  *streamer.StreamManager
 }
 
 // NewWSHandler creates a new WebSocket handler instance
-func NewWSHandler(upgrader websocket.Upgrader, manager *streamer.StreamManager) *WSHandler {
+func NewWSHandler(store *service.StreamStore, upgrader websocket.Upgrader, manager *streamer.StreamManager) *WSHandler {
 	return &WSHandler{
+		store:    store,
 		upgrader: upgrader,
 		manager:  manager,
 	}
 }
 
-// ServeWS upgrades the HTTP connection and streams video frames to the client
+// ServeWS validates the stream ID, upgrades the HTTP connection, and streams video frames
 func (h *WSHandler) ServeWS(w http.ResponseWriter, r *http.Request) {
 	streamID := r.PathValue("id")
 	if streamID == "" {
-		// Fallback for paths without wildcards
 		streamID = strings.TrimPrefix(r.URL.Path, "/ws/stream/")
 		streamID = strings.Trim(streamID, "/")
 	}
 
 	if streamID == "" {
 		WriteError(w, http.StatusBadRequest, "stream ID is required")
+		return
+	}
+
+	// Validate stream exists BEFORE upgrading WebSocket to avoid leaking connections
+	if _, err := h.store.Get(streamID); err != nil {
+		WriteError(w, http.StatusNotFound, "stream not found")
 		return
 	}
 

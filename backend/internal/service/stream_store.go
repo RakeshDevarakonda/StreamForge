@@ -3,6 +3,8 @@ package service
 import (
 	"errors"
 	"fmt"
+	"net"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -13,9 +15,12 @@ import (
 
 var (
 	ErrStreamNotFound = errors.New("stream not found")
-	ErrInvalidRTSPURL = errors.New("invalid RTSP URL: must start with rtsp:// or rtsps://")
+	ErrInvalidRTSPURL = errors.New("invalid RTSP URL: must be a valid rtsp:// or rtsps:// URL with host and port/path")
 	ErrStreamExists   = errors.New("a stream with this RTSP URL already exists")
+	ErrMaxStreams     = errors.New("maximum number of concurrent streams reached (limit: 16)")
 )
+
+const MaxAllowedStreams = 16
 
 // StreamStore manages in-memory cameras/streams with thread safety
 type StreamStore struct {
@@ -60,12 +65,41 @@ func (s *StreamStore) Get(id string) (*models.Stream, error) {
 // Add validates and adds a new stream to the store
 func (s *StreamStore) Add(req models.CreateStreamRequest) (*models.Stream, error) {
 	rtspURL := strings.TrimSpace(req.RTSPURL)
-	if !strings.HasPrefix(rtspURL, "rtsp://") && !strings.HasPrefix(rtspURL, "rtsps://") {
+
+	// Robust URL parsing & scheme validation
+	parsedURL, err := url.Parse(rtspURL)
+	if err != nil {
 		return nil, ErrInvalidRTSPURL
+	}
+
+	scheme := strings.ToLower(parsedURL.Scheme)
+	if scheme != "rtsp" && scheme != "rtsps" {
+		return nil, ErrInvalidRTSPURL
+	}
+
+	hostname := parsedURL.Hostname()
+	if hostname == "" {
+		return nil, ErrInvalidRTSPURL
+	}
+
+	// SSRF Protection: Disallow AWS/cloud metadata IP (169.254.169.254)
+	if hostname == "169.254.169.254" || strings.HasPrefix(hostname, "169.254.") {
+		return nil, errors.New("access to cloud link-local metadata addresses is restricted")
+	}
+
+	// Ensure port if specified is valid
+	if portStr := parsedURL.Port(); portStr != "" {
+		if _, err := net.LookupPort("tcp", portStr); err != nil {
+			return nil, fmt.Errorf("invalid port in RTSP URL: %w", err)
+		}
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	if len(s.streams) >= MaxAllowedStreams {
+		return nil, ErrMaxStreams
+	}
 
 	// Check for duplicates
 	for _, existing := range s.streams {
