@@ -27,9 +27,9 @@ func main() {
 
 	log.Printf("[Init] Starting StreamForge backend (ENV=%s, PORT=%s)", cfg.Env, cfg.Port)
 
-	// 2. Initialize in-memory stream store
-	store := service.NewStreamStore(cfg)
-	log.Printf("[Init] Seeded stream store with %d default cameras", len(store.GetAll()))
+	// 2. Initialize in-memory stream store (starts completely empty)
+	store := service.NewStreamStore()
+	log.Println("[Init] Initialized clean stream store")
 
 	// 3. Initialize stream manager for orchestrating FFmpeg child processes
 	manager := streamer.NewStreamManager(cfg, store)

@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/joho/godotenv"
@@ -12,11 +13,10 @@ import (
 
 // Config holds all server configuration variables
 type Config struct {
-	Port               string
-	Env                string
-	AllowedOrigins     []string
-	DefaultRTSPBaseURL string
-	FFmpegPath         string
+	Port           string
+	Env            string
+	AllowedOrigins []string
+	FFmpegPath     string
 }
 
 // Load reads configuration from environment variables with intelligent local/cloud path resolution
@@ -33,11 +33,6 @@ func Load() (*Config, error) {
 	env := strings.TrimSpace(os.Getenv("ENV"))
 	if env == "" {
 		return nil, fmt.Errorf("required environment variable ENV is not set")
-	}
-
-	baseURL := strings.TrimSpace(os.Getenv("DEFAULT_RTSP_BASE_URL"))
-	if baseURL == "" {
-		return nil, fmt.Errorf("required environment variable DEFAULT_RTSP_BASE_URL is not set")
 	}
 
 	originsRaw := strings.TrimSpace(os.Getenv("ALLOWED_ORIGINS"))
@@ -61,24 +56,28 @@ func Load() (*Config, error) {
 	ffmpegPath := resolveFFmpegPath()
 
 	return &Config{
-		Port:               port,
-		Env:                env,
-		AllowedOrigins:     allowedOrigins,
-		DefaultRTSPBaseURL: strings.TrimRight(baseURL, "/"),
-		FFmpegPath:         ffmpegPath,
+		Port:           port,
+		Env:            env,
+		AllowedOrigins: allowedOrigins,
+		FFmpegPath:     ffmpegPath,
 	}, nil
 }
 
 // resolveFFmpegPath discovers the valid FFmpeg executable location
-// 1. Checks explicit FFMPEG_PATH env var if provided (useful for local Windows testing)
-// 2. Looks up "ffmpeg" in system PATH (standard in Docker containers & Linux cloud deployments)
+// 1. Checks explicit FFMPEG_PATH env var if provided
+// 2. Looks up "ffmpeg" in current process PATH
+// 3. Fallback: Automatically scans Windows WinGet package directory
+// 4. Default fallback to "ffmpeg" (for Linux/Docker cloud environments)
 func resolveFFmpegPath() string {
 	if explicitPath := strings.TrimSpace(os.Getenv("FFMPEG_PATH")); explicitPath != "" {
 		if path, err := exec.LookPath(explicitPath); err == nil {
 			log.Printf("[Config] Using explicit FFmpeg path: %s", path)
 			return path
 		}
-		log.Printf("[Config] Explicit FFMPEG_PATH '%s' not found, falling back to system search", explicitPath)
+		if _, err := os.Stat(explicitPath); err == nil {
+			log.Printf("[Config] Found FFmpeg at explicit file path: %s", explicitPath)
+			return explicitPath
+		}
 	}
 
 	if systemPath, err := exec.LookPath("ffmpeg"); err == nil {
@@ -86,8 +85,29 @@ func resolveFFmpegPath() string {
 		return systemPath
 	}
 
-	// Default fallback to "ffmpeg" for containers where PATH is resolved at execution time
-	log.Println("[Config] WARNING: 'ffmpeg' not immediately found in PATH at startup. Ensure FFmpeg is installed.")
+	// Windows fallback: Check WinGet default installation folder if terminal hasn't refreshed PATH
+	localAppData := os.Getenv("LOCALAPPDATA")
+	if localAppData != "" {
+		winGetPath := filepath.Join(localAppData, "Microsoft", "WinGet", "Packages")
+		var discoveredPath string
+		_ = filepath.Walk(winGetPath, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return nil
+			}
+			if !info.IsDir() && strings.EqualFold(info.Name(), "ffmpeg.exe") {
+				discoveredPath = path
+				return filepath.SkipAll
+			}
+			return nil
+		})
+
+		if discoveredPath != "" {
+			log.Printf("[Config] Automatically discovered Windows WinGet FFmpeg: %s", discoveredPath)
+			return discoveredPath
+		}
+	}
+
+	log.Println("[Config] Using default system command: ffmpeg")
 	return "ffmpeg"
 }
 

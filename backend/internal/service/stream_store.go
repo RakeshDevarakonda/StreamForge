@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"streamforge-backend/internal/config"
 	"streamforge-backend/internal/models"
 )
 
@@ -24,46 +23,11 @@ type StreamStore struct {
 	streams map[string]*models.Stream
 }
 
-// NewStreamStore creates an in-memory store pre-seeded with sample camera feeds from config
-func NewStreamStore(cfg *config.Config) *StreamStore {
-	store := &StreamStore{
+// NewStreamStore creates an empty in-memory store for registered cameras/streams
+func NewStreamStore() *StreamStore {
+	return &StreamStore{
 		streams: make(map[string]*models.Stream),
 	}
-
-	if cfg == nil || cfg.DefaultRTSPBaseURL == "" {
-		return store
-	}
-
-	baseURL := cfg.DefaultRTSPBaseURL
-
-	// Seed with default demo cameras using the environment's base URL
-	defaultCameras := []models.Stream{
-		{
-			ID:          "camera-1",
-			Name:        "Office Entrance",
-			RTSPURL:     fmt.Sprintf("%s/live/stream1", baseURL),
-			Status:      models.StatusStopped,
-			ViewerCount: 0,
-			CreatedAt:   time.Now(),
-			UpdatedAt:   time.Now(),
-		},
-		{
-			ID:          "camera-2",
-			Name:        "Warehouse Floor",
-			RTSPURL:     fmt.Sprintf("%s/live/stream2", baseURL),
-			Status:      models.StatusStopped,
-			ViewerCount: 0,
-			CreatedAt:   time.Now(),
-			UpdatedAt:   time.Now(),
-		},
-	}
-
-	for _, cam := range defaultCameras {
-		c := cam
-		store.streams[c.ID] = &c
-	}
-
-	return store
 }
 
 // GetAll returns a copy of all registered streams

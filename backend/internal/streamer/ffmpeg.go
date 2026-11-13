@@ -48,7 +48,7 @@ func (p *FFmpegProcess) Start(ctx context.Context) (io.ReadCloser, error) {
 	// Low-latency FFmpeg parameters for RTSP over TCP -> MPEG1 video stream over MPEG-TS
 	args := []string{
 		"-rtsp_transport", "tcp",         // Force TCP for reliable packet delivery
-		"-stimeout", "5000000",             // 5 seconds network timeout (in microseconds)
+		"-timeout", "5000000",              // 5 seconds network timeout (in microseconds)
 		"-i", p.rtspURL,                    // Input RTSP stream URL
 		"-f", "mpegts",                     // Container format: MPEG-TS
 		"-codec:v", "mpeg1video",           // Video codec: MPEG1 (supported natively by JSMpeg in canvas)
