@@ -13,19 +13,30 @@ func CORS(cfg *config.Config) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			origin := r.Header.Get("Origin")
 
-			// Check if request origin matches allowed origins
+			// Check if allowed origins contains wildcard "*" or matches origin
+			allowAll := false
 			allowed := false
 			for _, allowedOrigin := range cfg.AllowedOrigins {
-				if allowedOrigin == "*" || strings.EqualFold(allowedOrigin, origin) {
+				if allowedOrigin == "*" {
+					allowAll = true
+					allowed = true
+					break
+				}
+				if strings.EqualFold(allowedOrigin, origin) {
 					allowed = true
 					break
 				}
 			}
 
-			if allowed && origin != "" {
+			// If "*" is in allowed origins, allow all origins
+			if allowAll {
+				if origin != "" {
+					w.Header().Set("Access-Control-Allow-Origin", origin)
+				} else {
+					w.Header().Set("Access-Control-Allow-Origin", "*")
+				}
+			} else if allowed && origin != "" {
 				w.Header().Set("Access-Control-Allow-Origin", origin)
-			} else if len(cfg.AllowedOrigins) == 1 && cfg.AllowedOrigins[0] == "*" {
-				w.Header().Set("Access-Control-Allow-Origin", "*")
 			}
 
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
@@ -42,3 +53,4 @@ func CORS(cfg *config.Config) func(http.Handler) http.Handler {
 		})
 	}
 }
+
