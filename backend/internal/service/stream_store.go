@@ -24,18 +24,19 @@ type StreamStore struct {
 	streams map[string]*models.Stream
 }
 
-// NewStreamStore creates an in-memory store pre-seeded with sample camera feeds
+// NewStreamStore creates an in-memory store pre-seeded with sample camera feeds from config
 func NewStreamStore(cfg *config.Config) *StreamStore {
 	store := &StreamStore{
 		streams: make(map[string]*models.Stream),
 	}
 
-	baseURL := "rtsp://localhost:8554"
-	if cfg != nil && cfg.DefaultRTSPBaseURL != "" {
-		baseURL = cfg.DefaultRTSPBaseURL
+	if cfg == nil || cfg.DefaultRTSPBaseURL == "" {
+		return store
 	}
 
-	// Seed with default demo cameras for immediate out-of-the-box testing
+	baseURL := cfg.DefaultRTSPBaseURL
+
+	// Seed with default demo cameras using the environment's base URL
 	defaultCameras := []models.Stream{
 		{
 			ID:          "camera-1",
