@@ -53,12 +53,3 @@ type CreateStreamRequest struct {
 	RTSPURL string `json:"rtsp_url"`
 }
 
-// StreamStats provides live metrics for an active stream
-type StreamStats struct {
-	StreamID    string       `json:"stream_id"`
-	Status      StreamStatus `json:"status"`
-	ViewerCount int          `json:"viewer_count"`
-	BytesOut    int64        `json:"bytes_out"`
-	UptimeSec   int64        `json:"uptime_sec"`
-}
-
