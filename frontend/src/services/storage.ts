@@ -6,13 +6,21 @@ export interface SavedCamera {
   rtsp_url: string;
 }
 
-// Normalize RTSP URL for robust comparison
+// Normalize RTSP URL for strict duplicate prevention
+// Strips credentials, trailing slashes, and lowercases for uniform comparison
 export function normalizeRtspUrl(raw: string): string {
+  if (!raw) return '';
+  let cleaned = raw.trim();
+  // Strip trailing slashes
+  cleaned = cleaned.replace(/\/+$/, '');
+  // Strip user:password@ credentials
+  cleaned = cleaned.replace(/\/\/[^@]+@/, '//');
+  // Lowercase scheme & host
   try {
-    const u = new URL(raw);
-    return `${u.protocol}//${u.host}${u.pathname}${u.search}`;
+    const u = new URL(cleaned);
+    return `${u.protocol.toLowerCase()}//${u.host.toLowerCase()}${u.pathname.replace(/\/+$/, '')}${u.search}`;
   } catch {
-    return raw.replace(/\/\/[^@]+@/, '//').trim();
+    return cleaned.toLowerCase();
   }
 }
 
